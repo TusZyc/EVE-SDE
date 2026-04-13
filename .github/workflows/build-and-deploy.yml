@@ -29,9 +29,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install build dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install openpyxl
+
       - name: Build static site from official SDE
         env:
           SDE_VARIANT: jsonl
+          PYTHONUTF8: "1"
+          CEVE_MARKET_XLSX_URL: https://www.ceve-market.org/dumps/evedata.xlsx
         run: |
           python scripts/build_sde_site.py
 
