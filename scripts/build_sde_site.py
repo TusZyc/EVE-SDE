@@ -43,7 +43,7 @@ SEARCH_INDEX_FILES = {
     "mapRegions",
     "mapConstellations",
     "mapSolarSystems",
-    "staStations",
+    "npcStations",
     "factions",
     "races",
     "blueprints",
@@ -63,6 +63,7 @@ FILE_INFO = {
     "mapregions": {"label": "星域", "desc": "EVE 宇宙中的 Region。"},
     "mapconstellations": {"label": "星座", "desc": "EVE 宇宙中的 Constellation。"},
     "mapsolarsystems": {"label": "星系", "desc": "EVE 宇宙中的 Solar System。"},
+    "npcstations": {"label": "NPC 空间站", "desc": "官方 SDE 中的 NPC 空间站静态数据。"},
     "stastations": {"label": "空间站", "desc": "NPC 空间站资料。"},
     "factions": {"label": "势力", "desc": "NPC 势力与阵营定义。"},
     "races": {"label": "种族", "desc": "艾玛、加达里、盖伦特、米玛塔尔等种族定义。"},
@@ -138,6 +139,7 @@ ENTITY_FILE_HINTS = {
     "mapregions": "region",
     "mapconstellations": "constellation",
     "mapsolarsystems": "system",
+    "npcstations": "station",
     "stastations": "station",
     "factions": "faction",
     "races": "race",
@@ -342,15 +344,13 @@ def infer_titles(record: dict[str, Any], stem: str, key: str, translation_map: d
         entity_id = str(record["_key"])
 
     zh: str | None = None
-    if entity_kind and entity_id:
+    for field in ("name", "displayName", "description"):
+        if field in record:
+            zh = pick_zh(record[field])
+            if zh:
+                break
+    if not zh and entity_kind and entity_id:
         zh = translation_map.get(entity_kind, {}).get(entity_id)
-
-    if not zh:
-        for field in ("name", "displayName", "description"):
-            if field in record:
-                zh = pick_zh(record[field])
-                if zh:
-                    break
 
     en: str | None = None
     for field in ("name", "displayName", "description", "effectName", "iconFile"):
@@ -448,7 +448,7 @@ def compact(record: dict[str, Any], stem: str, translation_map: dict[str, dict[s
     file_key = file_key_from_stem(stem)
     entity_kind = guess_entity_kind(out, file_key)
     entity_id = key
-    market_path = translation_map.get("type_market_path", {}).get(entity_id) if entity_kind == "type" else None
+    market_path = None
     localized_description = translation_map.get("type_description", {}).get(entity_id) if entity_kind == "type" else None
     location_meta = None
     if entity_kind == "system":
@@ -664,19 +664,16 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, Any]]:
             "constellation",
             "system",
             "station",
-            "structure",
             "group",
             "category",
             "marketgroup",
             "faction",
             "race",
             "type_description",
-            "type_market_path",
             "region_meta",
             "constellation_meta",
             "system_meta",
             "station_meta",
-            "structure_meta",
         }
     }
     if not xlsx_path or not xlsx_path.exists() or load_workbook is None:
@@ -727,11 +724,6 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, Any]]:
             id_idx = header_index(headers, ("typeID", "物品ID"))
             name_idx = header_index(headers, ("物品名称", "名称"))
             desc_idx = header_index(headers, ("描述",))
-            path_indexes = [
-                idx
-                for idx, header in enumerate(headers)
-                if header and ("市场分类" in header or re.search(r"market\s*group", header, re.I))
-            ]
             for row in rows:
                 row = list(row)
                 if id_idx is None or id_idx >= len(row):
@@ -747,13 +739,6 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, Any]]:
                     desc = clean_html(safe_text(row[desc_idx]))
                     if desc:
                         mapping["type_description"][text_id] = desc
-                path = [
-                    safe_text(row[idx])
-                    for idx in path_indexes
-                    if idx < len(row) and safe_text(row[idx])
-                ]
-                if path:
-                    mapping["type_market_path"][text_id] = path
 
         elif "星域" in title:
             region_idx = header_index(headers, ("星域ID", "regionID"))
@@ -863,46 +848,6 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, Any]]:
                     "security": security,
                 }
 
-        elif "玩家公开建筑" in title:
-            structure_idx = header_index(headers, ("建筑物ID", "structureID"))
-            structure_name_idx = header_index(headers, ("建筑物名称", "建筑名称"))
-            structure_type_idx = header_index(headers, ("建筑物类型", "建筑类型"))
-            system_idx = header_index(headers, ("星系ID", "solarSystemID", "systemID"))
-            system_name_idx = header_index(headers, ("星系名字", "星系名称"))
-            const_idx = header_index(headers, ("星座ID", "constellationID"))
-            const_name_idx = header_index(headers, ("星座名字", "星座名称"))
-            region_idx = header_index(headers, ("星域ID", "regionID"))
-            region_name_idx = header_index(headers, ("星域名字", "星域名称"))
-            security_idx = header_index(headers, ("安全等级", "securityStatus"))
-            for row in rows:
-                row = list(row)
-                if structure_idx is None or structure_idx >= len(row):
-                    continue
-                structure_id = as_id(row[structure_idx])
-                if not structure_id:
-                    continue
-                structure_name = safe_text(row[structure_name_idx]) if structure_name_idx is not None and structure_name_idx < len(row) else None
-                structure_type = safe_text(row[structure_type_idx]) if structure_type_idx is not None and structure_type_idx < len(row) else None
-                system_id = as_id(row[system_idx]) if system_idx is not None and system_idx < len(row) else None
-                system_name = safe_text(row[system_name_idx]) if system_name_idx is not None and system_name_idx < len(row) else None
-                const_id = as_id(row[const_idx]) if const_idx is not None and const_idx < len(row) else None
-                const_name = safe_text(row[const_name_idx]) if const_name_idx is not None and const_name_idx < len(row) else None
-                region_id = as_id(row[region_idx]) if region_idx is not None and region_idx < len(row) else None
-                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
-                security = row[security_idx] if security_idx is not None and security_idx < len(row) else None
-                if structure_name:
-                    mapping["structure"][structure_id] = structure_name
-                mapping["structure_meta"][structure_id] = {
-                    "name": structure_name,
-                    "type": structure_type,
-                    "systemID": system_id,
-                    "systemName": system_name,
-                    "constellationID": const_id,
-                    "constellationName": const_name,
-                    "regionID": region_id,
-                    "regionName": region_name,
-                    "security": security,
-                }
     return mapping
 
 
@@ -923,9 +868,9 @@ def iter_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def entity_name(record: dict[str, Any], kind: str, mapping: dict[str, dict[str, Any]]) -> tuple[str, str | None]:
     key = str(record.get("_key") or record.get(f"{kind}ID") or "")
-    zh = mapping.get(kind, {}).get(key)
+    zh = pick_zh(record.get("name")) or pick_zh(record.get("displayName"))
     if not zh:
-        zh = pick_zh(record.get("name")) or pick_zh(record.get("displayName"))
+        zh = mapping.get(kind, {}).get(key)
     en = pick_en(record.get("name")) or pick_en(record.get("displayName"))
     title = str(zh or en or key)
     return title, en if en and en != title else None
@@ -965,9 +910,44 @@ def build_game_data(extracted: Path, mapping: dict[str, dict[str, Any]]) -> dict
     groups = {str(item.get("_key")): item for item in iter_jsonl(extracted / "groups.jsonl")}
     categories = {str(item.get("_key")): item for item in iter_jsonl(extracted / "categories.jsonl")}
     market_groups = {str(item.get("_key")): item for item in iter_jsonl(extracted / "marketGroups.jsonl")}
+    regions = {str(item.get("_key")): item for item in iter_jsonl(extracted / "mapRegions.jsonl")}
+    constellations = {str(item.get("_key")): item for item in iter_jsonl(extracted / "mapConstellations.jsonl")}
+    systems = {str(item.get("_key")): item for item in iter_jsonl(extracted / "mapSolarSystems.jsonl")}
+    stations = iter_jsonl(extracted / "npcStations.jsonl")
 
     type_index: dict[str, dict[str, Any]] = {}
-    market_root: dict[str, Any] = {"name": "市场", "children": {}, "typeIDs": []}
+    market_nodes: dict[str, dict[str, Any]] = {"root": {"id": "root", "name": "市场", "children": [], "typeIDs": []}}
+    for group_id, record in market_groups.items():
+        name, _ = entity_name(record, "marketgroup", mapping)
+        market_nodes[group_id] = {
+            "id": group_id,
+            "name": name,
+            "parent": as_id(record.get("parentGroupID")),
+            "children": [],
+            "typeIDs": [],
+        }
+    for group_id, node in market_nodes.items():
+        if group_id == "root":
+            continue
+        parent_id = node.get("parent")
+        parent = market_nodes.get(parent_id or "root", market_nodes["root"])
+        parent["children"].append(group_id)
+
+    def market_path_for(group_id: str | None) -> list[str]:
+        if not group_id:
+            return []
+        path: list[str] = []
+        current_id = group_id
+        seen: set[str] = set()
+        while current_id and current_id not in seen:
+            seen.add(current_id)
+            node = market_nodes.get(current_id)
+            if not node:
+                break
+            path.insert(0, str(node["name"]))
+            current_id = node.get("parent")
+        return path
+
     for record in types:
         type_id = as_id(record.get("_key"))
         if not type_id:
@@ -977,26 +957,12 @@ def build_game_data(extracted: Path, mapping: dict[str, dict[str, Any]]) -> dict
         group = groups.get(group_id or "")
         category = categories.get(str(group.get("categoryID")) if group else "")
         market_group_id = as_id(record.get("marketGroupID"))
-        market_group = market_groups.get(market_group_id or "")
-        market_path = mapping.get("type_market_path", {}).get(type_id)
-        if not market_path and market_group:
-            market_path = []
-            current = market_group
-            seen: set[str] = set()
-            while current:
-                current_id = as_id(current.get("_key"))
-                if not current_id or current_id in seen:
-                    break
-                seen.add(current_id)
-                name, _ = entity_name(current, "marketgroup", mapping)
-                market_path.insert(0, name)
-                parent_id = as_id(current.get("parentGroupID"))
-                current = market_groups.get(parent_id or "")
-        if isinstance(market_path, list) and market_path:
-            add_market_path(market_root, [str(part) for part in market_path], type_id)
+        market_path = market_path_for(market_group_id)
+        if market_group_id and market_group_id in market_nodes:
+            market_nodes[market_group_id]["typeIDs"].append(type_id)
         group_name, _ = entity_name(group, "group", mapping) if group else (None, None)
         category_name, _ = entity_name(category, "category", mapping) if category else (None, None)
-        desc = mapping.get("type_description", {}).get(type_id) or clean_html(pick_zh(record.get("description")))
+        desc = clean_html(pick_zh(record.get("description"))) or mapping.get("type_description", {}).get(type_id)
         type_index[type_id] = {
             "id": type_id,
             "name": title,
@@ -1011,48 +977,60 @@ def build_game_data(extracted: Path, mapping: dict[str, dict[str, Any]]) -> dict
             "description": desc,
         }
 
+    def compact_market_node(node_id: str) -> dict[str, Any]:
+        node = market_nodes[node_id]
+        children = [compact_market_node(child_id) for child_id in node["children"]]
+        children.sort(key=lambda item: item["name"] or "")
+        return {
+            "id": node["id"],
+            "name": node["name"],
+            "typeIDs": sorted(set(node["typeIDs"]), key=lambda value: int(value) if str(value).isdigit() else str(value)),
+            "children": children,
+        }
+
     region_tree: dict[str, dict[str, Any]] = {}
-    for region_id, meta in mapping.get("region_meta", {}).items():
-        region_tree[region_id] = {"id": region_id, "name": meta.get("name"), "constellations": {}}
-    for const_id, meta in mapping.get("constellation_meta", {}).items():
-        region_id = meta.get("regionID")
+    for region_id, record in regions.items():
+        name, _ = entity_name(record, "region", mapping)
+        region_tree[region_id] = {"id": region_id, "name": name, "constellations": {}}
+    for const_id, record in constellations.items():
+        region_id = as_id(record.get("regionID"))
         if not region_id:
             continue
-        region = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})
-        region["constellations"].setdefault(const_id, {"id": const_id, "name": meta.get("name"), "systems": {}})
-    for system_id, meta in mapping.get("system_meta", {}).items():
-        region_id = meta.get("regionID")
-        const_id = meta.get("constellationID")
+        name, _ = entity_name(record, "constellation", mapping)
+        region = region_tree.setdefault(region_id, {"id": region_id, "name": region_id, "constellations": {}})
+        region["constellations"][const_id] = {"id": const_id, "name": name, "systems": {}}
+    for system_id, record in systems.items():
+        region_id = as_id(record.get("regionID"))
+        const_id = as_id(record.get("constellationID"))
         if not region_id or not const_id:
             continue
-        region = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})
-        const = region["constellations"].setdefault(const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}})
+        name, _ = entity_name(record, "system", mapping)
+        region = region_tree.setdefault(region_id, {"id": region_id, "name": region_id, "constellations": {}})
+        const = region["constellations"].setdefault(const_id, {"id": const_id, "name": const_id, "systems": {}})
         const["systems"][system_id] = {
             "id": system_id,
-            "name": meta.get("name"),
-            "security": meta.get("security"),
-            "securityBand": security_band(meta.get("security")),
+            "name": name,
+            "security": record.get("securityStatus"),
+            "securityBand": security_band(record.get("securityStatus")),
             "stations": [],
-            "structures": [],
         }
-    for station_id, meta in mapping.get("station_meta", {}).items():
-        system_id = meta.get("systemID")
-        region_id = meta.get("regionID")
-        const_id = meta.get("constellationID")
-        if region_id and const_id and system_id:
-            system = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})["constellations"].setdefault(
-                const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}}
-            )["systems"].setdefault(system_id, {"id": system_id, "name": meta.get("systemName"), "stations": [], "structures": []})
-            system.setdefault("stations", []).append({"id": station_id, "name": meta.get("name")})
-    for structure_id, meta in mapping.get("structure_meta", {}).items():
-        system_id = meta.get("systemID")
-        region_id = meta.get("regionID")
-        const_id = meta.get("constellationID")
-        if region_id and const_id and system_id:
-            system = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})["constellations"].setdefault(
-                const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}}
-            )["systems"].setdefault(system_id, {"id": system_id, "name": meta.get("systemName"), "stations": [], "structures": []})
-            system.setdefault("structures", []).append({"id": structure_id, "name": meta.get("name"), "type": meta.get("type")})
+    for record in stations:
+        station_id = as_id(record.get("_key"))
+        system_id = as_id(record.get("solarSystemID"))
+        station_name = mapping.get("station", {}).get(station_id or "") or f"NPC 空间站 {station_id}"
+        system_record = systems.get(system_id or "")
+        if not station_id or not system_id or not system_record:
+            continue
+        region_id = as_id(system_record.get("regionID"))
+        const_id = as_id(system_record.get("constellationID"))
+        if not region_id or not const_id:
+            continue
+        region = region_tree.setdefault(region_id, {"id": region_id, "name": region_id, "constellations": {}})
+        const = region["constellations"].setdefault(const_id, {"id": const_id, "name": const_id, "systems": {}})
+        system = const["systems"].setdefault(system_id, {"id": system_id, "name": system_id, "stations": []})
+        type_id = as_id(record.get("typeID"))
+        station_type = type_index.get(type_id or "", {}).get("name")
+        system.setdefault("stations", []).append({"id": station_id, "name": station_name, "type": station_type})
 
     universe = []
     for region in sorted(region_tree.values(), key=lambda item: item.get("name") or ""):
@@ -1061,21 +1039,19 @@ def build_game_data(extracted: Path, mapping: dict[str, dict[str, Any]]) -> dict
             systems = []
             for system in sorted(const["systems"].values(), key=lambda item: item.get("name") or ""):
                 system["stations"] = sorted(system.get("stations", []), key=lambda item: item.get("name") or "")
-                system["structures"] = sorted(system.get("structures", []), key=lambda item: item.get("name") or "")
                 systems.append(system)
             constellations.append({"id": const["id"], "name": const["name"], "systems": systems})
         universe.append({"id": region["id"], "name": region["name"], "constellations": constellations})
 
     return {
         "typeIndex": type_index,
-        "marketTree": compact_tree(market_root),
+        "marketTree": compact_market_node("root"),
         "universe": universe,
         "counts": {
             "types": len(type_index),
             "marketTypes": sum(1 for item in type_index.values() if item.get("marketPath")),
             "regions": len(universe),
-            "stations": len(mapping.get("station_meta", {})),
-            "structures": len(mapping.get("structure_meta", {})),
+            "stations": len(stations),
         },
     }
 

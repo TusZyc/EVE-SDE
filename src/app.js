@@ -143,7 +143,7 @@ function renderMarketNode(node, trail = []) {
   els.viewerTitle.textContent = path.length ? path.at(-1) : '市场分类';
   els.viewerSubtitle.textContent = path.length
     ? path.join(' / ')
-    : '按 CEVE 市场分类路径整理，更接近游戏内市场浏览方式。';
+    : '按官方 SDE marketGroups 关系整理，更接近游戏内市场浏览方式。';
   els.viewerToolbar.classList.remove('hidden');
   els.viewerToolbar.textContent = `当前层级包含 ${n(marketNodeCount(node))} 个物品。`;
   const children = node.children || [];
@@ -165,7 +165,7 @@ function renderMarketNode(node, trail = []) {
     <section class="summary">
       <div class="title">${esc(path.at(-1) || '市场分类')}</div>
       <div class="meta">${esc(path.join(' / ') || '市场根目录')}</div>
-      <p class="detail-text">先按市场分类缩小范围，再查看具体物品。这个入口优先使用 CEVE 表格里的中文市场路径。</p>
+      <p class="detail-text">先按市场分类缩小范围，再查看具体物品。这个入口使用官方 SDE 的市场分类关系，CEVE 只在缺中文时兜底。</p>
     </section>
   `;
 }
@@ -188,12 +188,6 @@ function renderSystemDetail(system, region, constellation) {
         ${(system.stations || []).map((station) => `<div>${esc(station.name)} <span>${esc(station.id)}</span></div>`).join('') || '<div>无记录</div>'}
       </div>
     </section>
-    <section class="section-block">
-      <div class="section-subtitle">玩家公开建筑</div>
-      <div class="mini-list">
-        ${(system.structures || []).map((item) => `<div>${esc(item.name)} <span>${esc(item.type || '')} · ${esc(item.id)}</span></div>`).join('') || '<div>无记录</div>'}
-      </div>
-    </section>
   `;
 }
 
@@ -203,9 +197,9 @@ function renderUniverse(region = null, constellation = null) {
   if (!region) {
     els.metricCurrent.textContent = '星图';
     els.viewerTitle.textContent = '星域';
-    els.viewerSubtitle.textContent = '按 CEVE 星域、星座、星系、空间站和公开建筑数据整理。';
+    els.viewerSubtitle.textContent = '按官方 SDE 星域、星座、星系和 NPC 空间站数据整理。';
     els.viewerToolbar.classList.remove('hidden');
-    els.viewerToolbar.textContent = `共 ${n(state.game.counts.regions)} 个星域，${n(state.game.counts.stations)} 个 NPC 空间站，${n(state.game.counts.structures)} 个公开建筑。`;
+    els.viewerToolbar.textContent = `共 ${n(state.game.counts.regions)} 个星域，${n(state.game.counts.stations)} 个 NPC 空间站。`;
     els.recordList.innerHTML = state.game.universe
       .map((item, index) => card(item.name, `${n(item.constellations.length)} 个星座`, '', `data-region="${index}"`))
       .join('');
@@ -236,7 +230,7 @@ function renderUniverse(region = null, constellation = null) {
   els.viewerToolbar.textContent = `共 ${n(constellation.systems.length)} 个星系。`;
   els.recordList.innerHTML = constellation.systems
     .map((system, index) => {
-      const extra = `<div class="meta">${esc(system.securityBand)} · NPC站 ${n(system.stations?.length || 0)} · 公开建筑 ${n(system.structures?.length || 0)}</div>`;
+      const extra = `<div class="meta">${esc(system.securityBand)} · NPC站 ${n(system.stations?.length || 0)}</div>`;
       return card(system.name, `安全等级 ${Number(system.security ?? 0).toFixed(3)} · 星系 ID ${system.id}`, extra, `data-system="${index}"`);
     })
     .join('');
@@ -440,11 +434,11 @@ function renderTranslationMeta(meta) {
   const workbook = info.externalTranslationWorkbook;
   if (workbook?.status === 'loaded') {
     const sheets = (workbook.sheetsApplied || []).join('、');
-    els.translationMeta.textContent = `汉化策略：官方中文优先，CEVE 对照表已加载（${sheets || '已应用'}）。`;
+    els.translationMeta.textContent = `汉化策略：官方 SDE 中文优先，缺中文时使用 CEVE 兜底（${sheets || '已应用'}）。`;
     return;
   }
   if (workbook?.status === 'failed') {
-    els.translationMeta.textContent = `汉化策略：官方中文优先，外部中文对照表加载失败：${workbook.reason}`;
+    els.translationMeta.textContent = `汉化策略：官方 SDE 中文优先，CEVE 兜底表加载失败：${workbook.reason}`;
     return;
   }
   els.translationMeta.textContent = info.sdeLocalizedText || '汉化策略：官方中文优先。';

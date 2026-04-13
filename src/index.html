@@ -6,7 +6,7 @@
     <title>EVE SDE 中文资料站</title>
     <meta
       name="description"
-      content="基于官方 EVE Online SDE 和 CEVE 中文数据构建的静态资料站，支持市场分类、星图位置、空间站、公开建筑、物品名与 ID 查询。"
+      content="基于官方 EVE Online SDE 构建的静态资料站，使用 CEVE 中文数据作为汉化兜底，支持市场分类、星图位置、空间站、物品名与 ID 查询。"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -29,7 +29,7 @@
             placeholder="搜索物品、星系、空间站、英文名或 ID..."
           />
           <p class="muted small">
-            搜索在浏览器本地完成。优先命中中文名、英文原名、ID 和 CEVE 市场分类路径。
+            搜索在浏览器本地完成。优先命中 SDE 中文名、英文原名、ID 和市场分类路径。
           </p>
           <div id="search-status" class="status"></div>
           <div id="search-results" class="list"></div>
@@ -47,10 +47,10 @@
       <main class="main">
         <section class="panel hero">
           <div>
-            <div class="eyebrow">官方 SDE + CEVE 中文数据</div>
+            <div class="eyebrow">官方 SDE + CEVE 汉化兜底</div>
             <h2>按游戏里的市场和星图方式查询静态数据</h2>
             <p class="muted">
-              默认入口是市场分类和宇宙位置。需要深入排查时，也可以打开原始 SDE 文件查看字段、ID 和 JSON。
+              默认入口是市场分类和宇宙位置。展示结构来自官方 SDE；CEVE 只在缺中文时补充汉化。
             </p>
           </div>
           <div class="metrics">
