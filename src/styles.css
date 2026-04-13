@@ -403,6 +403,26 @@ pre {
   font-size: 13px;
 }
 
+.file-group {
+  display: grid;
+  gap: 8px;
+}
+
+.file-group + .file-group {
+  margin-top: 12px;
+}
+
+.file-group-title {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 2px 0;
+}
+
+.compact-list .item {
+  padding: 10px;
+}
+
 @media (max-width: 1180px) {
   .app,
   .hero,

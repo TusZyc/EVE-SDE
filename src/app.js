@@ -28,10 +28,17 @@ const els = {
   detailTag: $('detail-tag'),
   prevPage: $('prev-page'),
   nextPage: $('next-page'),
-  tabMarket: $('tab-market'),
-  tabUniverse: $('tab-universe'),
-  tabRaw: $('tab-raw'),
 };
+
+const FILE_GROUPS = [
+  { title: '物品与市场', test: (file) => ['types', 'groups', 'categories', 'marketGroups', 'metaGroups', 'typeMaterials'].includes(file) },
+  { title: 'Dogma 与装配规则', test: (file) => file.startsWith('dogma') || file === 'dynamicItemAttributes' },
+  { title: '宇宙星图', test: (file) => file.startsWith('map') || file === 'landmarks' },
+  { title: 'NPC 与势力', test: (file) => file.includes('npc') || ['factions', 'races', 'bloodlines', 'ancestries', 'agentsInSpace', 'agentTypes'].includes(file) },
+  { title: '工业与蓝图', test: (file) => ['blueprints', 'schematics', 'planetSchematics', 'planetResources'].includes(file) },
+  { title: '空间站与设施', test: (file) => file.includes('station') || file.includes('Station') || file.includes('sovereignty') },
+  { title: '资源与表现', test: (file) => ['icons', 'graphics', 'skins', 'skinLicenses'].includes(file) },
+];
 
 async function loadJson(path) {
   const res = await fetch(path);
@@ -56,21 +63,17 @@ function card(title, meta, extra = '', data = '') {
   return `<button class="item" ${data}><div class="title">${esc(title)}</div><div class="meta">${esc(meta)}</div>${extra}</button>`;
 }
 
-function setMode(mode) {
-  for (const [name, button] of [
-    ['market', els.tabMarket],
-    ['universe', els.tabUniverse],
-    ['raw', els.tabRaw],
-  ]) {
-    button.classList.toggle('active', name === mode);
-  }
-  els.prevPage.classList.toggle('hidden', mode !== 'raw');
-  els.nextPage.classList.toggle('hidden', mode !== 'raw');
+function shortDescription(value, length = 180) {
+  if (!value) return '';
+  return value.length > length ? `${value.slice(0, length - 3)}...` : value;
 }
 
-function shortDescription(value) {
-  if (!value) return '';
-  return value.length > 180 ? `${value.slice(0, 177)}...` : value;
+function rawTitle(record, fallback = '未命名记录') {
+  return record?._ui?.title || record?._key || fallback;
+}
+
+function findType(typeID) {
+  return state.game?.typeIndex?.[String(typeID)] || null;
 }
 
 function typeLine(type) {
@@ -78,166 +81,65 @@ function typeLine(type) {
   if (type.categoryName) bits.push(type.categoryName);
   if (type.groupName) bits.push(type.groupName);
   if (type.marketPath?.length) bits.push(type.marketPath.join(' / '));
-  if (type.en) bits.push(type.en);
   return bits.join(' · ');
 }
 
-function renderTypeDetail(type) {
-  els.detailTag.textContent = `物品 ${type.id}`;
-  els.detailCard.classList.remove('empty');
-  els.detailCard.innerHTML = `
-    <section class="summary">
-      <div class="title">${esc(type.name || `物品 ${type.id}`)}</div>
-      ${type.en ? `<div class="alt-title">英文原名：${esc(type.en)}</div>` : ''}
-      <div class="chips">
-        ${type.published ? '<span class="pill ok">已发布</span>' : '<span class="pill warn">未发布</span>'}
-        ${type.categoryName ? `<span class="pill">${esc(type.categoryName)}</span>` : ''}
-        ${type.groupName ? `<span class="pill">${esc(type.groupName)}</span>` : ''}
-      </div>
-      ${type.marketPath?.length ? `<div class="path">${esc(type.marketPath.join(' / '))}</div>` : ''}
-      ${type.description ? `<p class="detail-text">${esc(shortDescription(type.description))}</p>` : ''}
-    </section>
-    <section class="section-block">
-      <div class="section-subtitle">常用 ID</div>
-      <div class="id-grid">
-        <div><span>typeID</span><strong>${esc(type.id)}</strong></div>
-        <div><span>groupID</span><strong>${esc(type.groupID || '-')}</strong></div>
-        <div><span>categoryID</span><strong>${esc(type.categoryID || '-')}</strong></div>
-        <div><span>marketGroupID</span><strong>${esc(type.marketGroupID || '-')}</strong></div>
-      </div>
-    </section>
-  `;
-}
-
-function renderTypeList(typeIDs, title, subtitle) {
-  const types = typeIDs.map((id) => state.game.typeIndex[id]).filter(Boolean);
-  els.viewerTitle.textContent = title;
-  els.viewerSubtitle.textContent = `${subtitle} · 共 ${n(types.length)} 个物品`;
-  els.viewerToolbar.classList.add('hidden');
-  els.recordList.innerHTML = types.length
-    ? types
-        .slice(0, 500)
-        .map((type) => card(type.name, typeLine(type), type.description ? `<div class="meta">${esc(shortDescription(type.description))}</div>` : '', `data-type-id="${esc(type.id)}"`))
-        .join('')
-    : card('这里还没有直接挂载物品', '继续展开子分类，或换一个分类查看。');
-  if (types.length > 500) {
-    els.recordList.innerHTML += `<div class="notice">结果较多，当前先显示前 500 条。可以用左侧搜索精确定位。</div>`;
+function buildRecordContext(record) {
+  const ui = record._ui || {};
+  const blocks = [];
+  const type = findType(ui.key);
+  if (type && state.currentFile === 'types') {
+    blocks.push(`
+      <section class="summary">
+        <div class="section-subtitle">物品关联</div>
+        <div class="chips">
+          ${type.published ? '<span class="pill ok">已发布</span>' : '<span class="pill warn">未发布</span>'}
+          ${type.categoryName ? `<span class="pill">${esc(type.categoryName)}</span>` : ''}
+          ${type.groupName ? `<span class="pill">${esc(type.groupName)}</span>` : ''}
+        </div>
+        ${type.marketPath?.length ? `<div class="path">${esc(type.marketPath.join(' / '))}</div>` : ''}
+        ${type.description ? `<p class="detail-text">${esc(shortDescription(type.description, 260))}</p>` : ''}
+        <div class="id-grid">
+          <div><span>typeID</span><strong>${esc(type.id)}</strong></div>
+          <div><span>groupID</span><strong>${esc(type.groupID || '-')}</strong></div>
+          <div><span>categoryID</span><strong>${esc(type.categoryID || '-')}</strong></div>
+          <div><span>marketGroupID</span><strong>${esc(type.marketGroupID || '-')}</strong></div>
+        </div>
+      </section>
+    `);
   }
-  els.recordList.querySelectorAll('[data-type-id]').forEach((btn) => {
-    btn.addEventListener('click', () => renderTypeDetail(state.game.typeIndex[btn.dataset.typeId]));
-  });
-  if (types[0]) renderTypeDetail(types[0]);
-}
-
-function marketNodeCount(node) {
-  let total = node.typeIDs?.length || 0;
-  for (const child of node.children || []) total += marketNodeCount(child);
-  return total;
-}
-
-function renderMarketNode(node, trail = []) {
-  setMode('market');
-  state.currentFile = null;
-  const path = [...trail, node.name].filter((item) => item && item !== '市场');
-  els.metricCurrent.textContent = path.at(-1) || '市场';
-  els.viewerTitle.textContent = path.length ? path.at(-1) : '市场分类';
-  els.viewerSubtitle.textContent = path.length
-    ? path.join(' / ')
-    : '按官方 SDE marketGroups 关系整理，更接近游戏内市场浏览方式。';
-  els.viewerToolbar.classList.remove('hidden');
-  els.viewerToolbar.textContent = `当前层级包含 ${n(marketNodeCount(node))} 个物品。`;
-  const children = node.children || [];
-  const childCards = children
-    .map((child, index) => card(child.name, `${n(marketNodeCount(child))} 个物品`, '', `data-market-child="${index}"`))
-    .join('');
-  const direct = node.typeIDs?.length
-    ? card('查看本分类物品', `${n(node.typeIDs.length)} 个直接挂载物品`, '', 'data-market-types="1"')
-    : '';
-  els.recordList.innerHTML = childCards || direct ? direct + childCards : card('没有子分类', '这个分类下没有可浏览的市场物品。');
-  els.recordList.querySelectorAll('[data-market-child]').forEach((btn) => {
-    btn.addEventListener('click', () => renderMarketNode(children[Number(btn.dataset.marketChild)], path));
-  });
-  const typeButton = els.recordList.querySelector('[data-market-types]');
-  if (typeButton) typeButton.addEventListener('click', () => renderTypeList(node.typeIDs || [], path.at(-1) || '市场物品', path.join(' / ')));
-  els.detailTag.textContent = '市场';
-  els.detailCard.classList.remove('empty');
-  els.detailCard.innerHTML = `
-    <section class="summary">
-      <div class="title">${esc(path.at(-1) || '市场分类')}</div>
-      <div class="meta">${esc(path.join(' / ') || '市场根目录')}</div>
-      <p class="detail-text">先按市场分类缩小范围，再查看具体物品。这个入口使用官方 SDE 的市场分类关系，CEVE 只在缺中文时兜底。</p>
-    </section>
-  `;
-}
-
-function renderSystemDetail(system, region, constellation) {
-  els.detailTag.textContent = `星系 ${system.id}`;
-  els.detailCard.classList.remove('empty');
-  els.detailCard.innerHTML = `
-    <section class="summary">
-      <div class="title">${esc(system.name)}</div>
-      <div class="chips">
-        <span class="pill">${esc(system.securityBand || '未知')}</span>
-        <span class="pill">${Number(system.security ?? 0).toFixed(3)}</span>
-      </div>
-      <div class="path">${esc(region.name)} / ${esc(constellation.name)} / ${esc(system.name)}</div>
-    </section>
-    <section class="section-block">
-      <div class="section-subtitle">NPC 空间站</div>
-      <div class="mini-list">
-        ${(system.stations || []).map((station) => `<div>${esc(station.name)} <span>${esc(station.id)}</span></div>`).join('') || '<div>无记录</div>'}
-      </div>
-    </section>
-  `;
-}
-
-function renderUniverse(region = null, constellation = null) {
-  setMode('universe');
-  state.currentFile = null;
-  if (!region) {
-    els.metricCurrent.textContent = '星图';
-    els.viewerTitle.textContent = '星域';
-    els.viewerSubtitle.textContent = '按官方 SDE 星域、星座、星系和 NPC 空间站数据整理。';
-    els.viewerToolbar.classList.remove('hidden');
-    els.viewerToolbar.textContent = `共 ${n(state.game.counts.regions)} 个星域，${n(state.game.counts.stations)} 个 NPC 空间站。`;
-    els.recordList.innerHTML = state.game.universe
-      .map((item, index) => card(item.name, `${n(item.constellations.length)} 个星座`, '', `data-region="${index}"`))
-      .join('');
-    els.recordList.querySelectorAll('[data-region]').forEach((btn) => {
-      btn.addEventListener('click', () => renderUniverse(state.game.universe[Number(btn.dataset.region)]));
-    });
-    els.detailTag.textContent = '星图';
-    els.detailCard.classList.add('empty');
-    els.detailCard.textContent = '选择一个星域后继续查看星座与星系。';
-    return;
+  if (ui.marketPath?.length && state.currentFile !== 'types') {
+    blocks.push(`
+      <section class="summary">
+        <div class="section-subtitle">市场路径</div>
+        <div class="path">${esc(ui.marketPath.join(' / '))}</div>
+      </section>
+    `);
   }
-  if (!constellation) {
-    els.metricCurrent.textContent = region.name;
-    els.viewerTitle.textContent = region.name;
-    els.viewerSubtitle.textContent = `星域 ID ${region.id}`;
-    els.viewerToolbar.textContent = `共 ${n(region.constellations.length)} 个星座。`;
-    els.recordList.innerHTML = region.constellations
-      .map((item, index) => card(item.name, `${n(item.systems.length)} 个星系`, '', `data-constellation="${index}"`))
-      .join('');
-    els.recordList.querySelectorAll('[data-constellation]').forEach((btn) => {
-      btn.addEventListener('click', () => renderUniverse(region, region.constellations[Number(btn.dataset.constellation)]));
-    });
-    return;
+  if (ui.location) {
+    const loc = ui.location;
+    blocks.push(`
+      <section class="summary">
+        <div class="section-subtitle">位置关联</div>
+        <div class="path">${esc([loc.regionName, loc.constellationName, loc.name].filter(Boolean).join(' / '))}</div>
+        ${loc.security !== undefined && loc.security !== null ? `<div class="meta">安全等级：${Number(loc.security).toFixed(3)}</div>` : ''}
+      </section>
+    `);
   }
-  els.metricCurrent.textContent = constellation.name;
-  els.viewerTitle.textContent = constellation.name;
-  els.viewerSubtitle.textContent = `${region.name} / ${constellation.name}`;
-  els.viewerToolbar.textContent = `共 ${n(constellation.systems.length)} 个星系。`;
-  els.recordList.innerHTML = constellation.systems
-    .map((system, index) => {
-      const extra = `<div class="meta">${esc(system.securityBand)} · NPC站 ${n(system.stations?.length || 0)}</div>`;
-      return card(system.name, `安全等级 ${Number(system.security ?? 0).toFixed(3)} · 星系 ID ${system.id}`, extra, `data-system="${index}"`);
-    })
-    .join('');
-  els.recordList.querySelectorAll('[data-system]').forEach((btn) => {
-    btn.addEventListener('click', () => renderSystemDetail(constellation.systems[Number(btn.dataset.system)], region, constellation));
-  });
-  if (constellation.systems[0]) renderSystemDetail(constellation.systems[0], region, constellation);
+  if (record.solarSystemID && state.currentFile === 'npcStations') {
+    blocks.push(`
+      <section class="summary">
+        <div class="section-subtitle">空间站关联</div>
+        <div class="id-grid">
+          <div><span>stationID</span><strong>${esc(record._ui?.key || record._key)}</strong></div>
+          <div><span>solarSystemID</span><strong>${esc(record.solarSystemID)}</strong></div>
+          <div><span>typeID</span><strong>${esc(record.typeID || '-')}</strong></div>
+          <div><span>operationID</span><strong>${esc(record.operationID || '-')}</strong></div>
+        </div>
+      </section>
+    `);
+  }
+  return blocks.join('');
 }
 
 function detailPairs(record) {
@@ -268,12 +170,12 @@ function setDetail(record, file) {
   els.detailCard.innerHTML = `
     <section class="summary">
       <div class="title">${esc(ui.title || '未命名记录')}</div>
-      ${ui.altTitle ? `<div class="alt-title">英文原名：${esc(ui.altTitle)}</div>` : ''}
-      ${ui.marketPath?.length ? `<div class="path">${esc(ui.marketPath.join(' / '))}</div>` : ''}
-      ${ui.localizedDescription ? `<p class="detail-text">${esc(shortDescription(ui.localizedDescription))}</p>` : ''}
+      ${ui.altTitle ? `<div class="alt-title">原名：${esc(ui.altTitle)}</div>` : ''}
+      ${ui.localizedDescription ? `<p class="detail-text">${esc(shortDescription(ui.localizedDescription, 260))}</p>` : ''}
       <div class="meta">${esc(ui.summary || '')}</div>
       <div class="muted small">${esc(ui.fileDesc || '')}</div>
     </section>
+    ${buildRecordContext(record)}
     <section class="section-block">
       <div class="section-subtitle">字段释义</div>
       <div class="field-list">${detailPairs(record)}</div>
@@ -293,8 +195,13 @@ function renderRecords(records, file) {
   els.recordList.innerHTML = records
     .map((record, i) => {
       const ui = record._ui || {};
-      const extra = ui.altTitle ? `<div class="meta">${esc(ui.altTitle)}</div>` : '';
-      return card(ui.title || record._key || 'record', ui.summary || `${file} · ${ui.key || ''}`, extra, `data-record-index="${i}"`);
+      const extraLines = [];
+      if (ui.altTitle) extraLines.push(`原名：${ui.altTitle}`);
+      const type = file === 'types' ? findType(ui.key) : null;
+      if (type) extraLines.push(typeLine(type));
+      if (ui.location) extraLines.push([ui.location.regionName, ui.location.constellationName].filter(Boolean).join(' / '));
+      const extra = extraLines.filter(Boolean).map((line) => `<div class="meta">${esc(line)}</div>`).join('');
+      return card(rawTitle(record), ui.summary || `${file} · ${ui.key || ''}`, extra, `data-record-index="${i}"`);
     })
     .join('');
   els.recordList.querySelectorAll('[data-record-index]').forEach((btn) => {
@@ -303,7 +210,6 @@ function renderRecords(records, file) {
 }
 
 async function openShard(file, shard = 0) {
-  setMode('raw');
   const manifest = await loadJson(`./data/files/${file}/manifest.json`);
   const records = await loadJson(`./data/files/${file}/${shard}.json`);
   state.currentFile = file;
@@ -345,50 +251,44 @@ function score(entry, query) {
   return 0;
 }
 
+async function locateSearchResult(item) {
+  const manifest = await loadJson(`./data/files/${item.file}/manifest.json`);
+  for (let shard = 0; shard < manifest.shards; shard += 1) {
+    const records = await loadJson(`./data/files/${item.file}/${shard}.json`);
+    const found = records.find((r) => String(r._ui?.key ?? r._key) === String(item.key));
+    if (found) {
+      state.currentFile = item.file;
+      state.currentShard = shard;
+      state.manifest = manifest;
+      state.records = records;
+      els.metricCurrent.textContent = manifest.title || item.file;
+      els.viewerTitle.textContent = manifest.title || item.file;
+      els.viewerSubtitle.textContent = `已从搜索结果定位到该记录，位于第 ${shard + 1} / ${manifest.shards} 个分片。`;
+      els.viewerToolbar.classList.remove('hidden');
+      els.viewerToolbar.textContent = `高频字段：${(manifest.topFields || []).join(' · ')}`;
+      els.prevPage.disabled = shard <= 0;
+      els.nextPage.disabled = shard >= manifest.shards - 1;
+      renderRecords(records, item.file);
+      setDetail(found, item.file);
+      return;
+    }
+  }
+  els.searchStatus.textContent = `已命中搜索索引，但没有在分片中定位到 ${item.file} / ${item.key}`;
+}
+
 function renderSearchResults(results) {
   if (!results.length) {
-    els.searchResults.innerHTML = card('没有找到匹配项', '试试中文名、英文名、ID、星系名或市场分类。');
+    els.searchResults.innerHTML = card('没有找到匹配项', '试试中文名、英文名、ID、字段名或 SDE 文件名。');
     return;
   }
   els.searchResults.innerHTML = results
     .map((item, i) => {
-      const extra = item.altTitle ? `<div class="meta">${esc(item.altTitle)}</div>` : '';
+      const extra = item.altTitle ? `<div class="meta">原名：${esc(item.altTitle)}</div>` : '';
       return card(item.title, `${item.fileLabel || item.file} · ${item.summary}`, extra, `data-result-index="${i}"`);
     })
     .join('');
   els.searchResults.querySelectorAll('[data-result-index]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const item = results[Number(btn.dataset.resultIndex)];
-      const type = state.game.typeIndex[item.key];
-      if (type && item.file === 'types') {
-        renderTypeList([item.key], item.title, '搜索结果');
-        renderTypeDetail(type);
-        return;
-      }
-      const manifest = await loadJson(`./data/files/${item.file}/manifest.json`);
-      for (let shard = 0; shard < manifest.shards; shard += 1) {
-        const records = await loadJson(`./data/files/${item.file}/${shard}.json`);
-        const found = records.find((r) => String(r._ui?.key ?? r._key) === String(item.key));
-        if (found) {
-          state.currentFile = item.file;
-          state.currentShard = shard;
-          state.manifest = manifest;
-          state.records = records;
-          setMode('raw');
-          els.metricCurrent.textContent = manifest.title || item.file;
-          els.viewerTitle.textContent = manifest.title || item.file;
-          els.viewerSubtitle.textContent = `已从搜索结果定位到该记录，位于第 ${shard + 1} / ${manifest.shards} 个分片。`;
-          els.viewerToolbar.classList.remove('hidden');
-          els.viewerToolbar.textContent = `高频字段：${(manifest.topFields || []).join(' · ')}`;
-          els.prevPage.disabled = shard <= 0;
-          els.nextPage.disabled = shard >= manifest.shards - 1;
-          renderRecords(records, item.file);
-          setDetail(found, item.file);
-          return;
-        }
-      }
-      els.searchStatus.textContent = `已命中搜索索引，但没有在分片中定位到 ${item.file} / ${item.key}`;
-    });
+    btn.addEventListener('click', () => locateSearchResult(results[Number(btn.dataset.resultIndex)]));
   });
 }
 
@@ -415,10 +315,28 @@ async function onSearch() {
   renderSearchResults(ranked);
 }
 
+function groupFiles(files) {
+  const groups = FILE_GROUPS.map((group) => ({ title: group.title, test: group.test, files: [] }));
+  const other = { title: '其他 SDE 文件', files: [] };
+  for (const file of files) {
+    const target = groups.find((group) => group.test(file.file));
+    if (target) target.files.push(file);
+    else other.files.push(file);
+  }
+  return [...groups.filter((group) => group.files.length), ...(other.files.length ? [other] : [])];
+}
+
 function renderFiles(files) {
   els.fileCount.textContent = n(files.length);
-  els.fileList.innerHTML = files
-    .map((file) => card(file.title || file.file, `${n(file.records)} 条记录 · ${file.shards} 个分片`, `<div class="meta">${esc(file.description || '')}</div>`, `data-file="${esc(file.file)}"`))
+  els.fileList.innerHTML = groupFiles(files)
+    .map((group) => `
+      <div class="file-group">
+        <div class="file-group-title">${esc(group.title)}</div>
+        ${group.files
+          .map((file) => card(file.title || file.file, `${n(file.records)} 条记录 · ${file.shards} 个分片`, `<div class="meta">${esc(file.description || '')}</div>`, `data-file="${esc(file.file)}"`))
+          .join('')}
+      </div>
+    `)
     .join('');
   els.fileList.querySelectorAll('[data-file]').forEach((btn) => {
     btn.addEventListener('click', () => openShard(btn.dataset.file, 0));
@@ -441,7 +359,7 @@ function renderTranslationMeta(meta) {
     els.translationMeta.textContent = `汉化策略：官方 SDE 中文优先，CEVE 兜底表加载失败：${workbook.reason}`;
     return;
   }
-  els.translationMeta.textContent = info.sdeLocalizedText || '汉化策略：官方中文优先。';
+  els.translationMeta.textContent = info.sdeLocalizedText || '汉化策略：官方 SDE 中文优先。';
 }
 
 async function init() {
@@ -455,7 +373,8 @@ async function init() {
     els.metricBuild.textContent = state.meta.buildNumber;
     els.metricFiles.textContent = n(state.meta.fileCount);
     renderFiles(state.meta.files || []);
-    renderMarketNode(state.game.marketTree);
+    const firstUseful = (state.meta.files || []).find((file) => file.file === 'types') || state.meta.files?.[0];
+    if (firstUseful) await openShard(firstUseful.file, 0);
   } catch (error) {
     console.error(error);
     els.buildMeta.textContent = '加载失败';
@@ -472,12 +391,6 @@ els.prevPage.addEventListener('click', () => {
 els.nextPage.addEventListener('click', () => {
   if (!state.currentFile || !state.manifest || state.currentShard >= state.manifest.shards - 1) return;
   openShard(state.currentFile, state.currentShard + 1);
-});
-els.tabMarket.addEventListener('click', () => renderMarketNode(state.game.marketTree));
-els.tabUniverse.addEventListener('click', () => renderUniverse());
-els.tabRaw.addEventListener('click', () => {
-  if (state.currentFile) openShard(state.currentFile, state.currentShard);
-  else if (state.meta.files?.[0]) openShard(state.meta.files[0].file, 0);
 });
 
 init();

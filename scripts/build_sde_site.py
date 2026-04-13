@@ -74,6 +74,47 @@ FILE_INFO = {
     "icons": {"label": "图标", "desc": "图标资源索引。"},
 }
 
+FILE_INFO.update(
+    {
+        "agentsinspace": {"label": "太空代理人", "desc": "代理人在太空中的位置记录。"},
+        "agenttypes": {"label": "代理人类型", "desc": "代理人类型和职业分类。"},
+        "ancestries": {"label": "血统出身", "desc": "角色创建时的出身背景。"},
+        "bloodlines": {"label": "血统", "desc": "四大种族下的血统资料。"},
+        "certificates": {"label": "证书", "desc": "技能证书和推荐技能组合。"},
+        "characterattributes": {"label": "角色属性", "desc": "感知、记忆力、毅力、智力、魅力等角色属性定义。"},
+        "clonegrades": {"label": "克隆等级", "desc": "历史克隆等级资料。"},
+        "compressibletypes": {"label": "可压缩物品", "desc": "可以压缩和对应压缩产物的物品关系。"},
+        "contrabandtypes": {"label": "违禁品", "desc": "不同势力区域的违禁品规则。"},
+        "controltowerresources": {"label": "控制塔资源", "desc": "POS 控制塔燃料和资源规则。"},
+        "corporationactivities": {"label": "军团活动类型", "desc": "NPC 军团的活动类型定义。"},
+        "dbuffcollections": {"label": "增减益集合", "desc": "Buff/Debuff 相关集合定义。"},
+        "dogmaattributecategories": {"label": "Dogma 属性分类", "desc": "Dogma 属性的分组分类。"},
+        "dogmaunits": {"label": "Dogma 单位", "desc": "Dogma 属性使用的单位定义。"},
+        "dynamicitemattributes": {"label": "动态物品属性", "desc": "深渊装备等动态物品可变化属性定义。"},
+        "graphics": {"label": "图形资源", "desc": "物品、星体、空间对象的图形资源索引。"},
+        "landmarks": {"label": "地标", "desc": "宇宙中的地标和说明。"},
+        "mapasteroidbelts": {"label": "小行星带", "desc": "星系内小行星带静态位置。"},
+        "mapmoons": {"label": "卫星", "desc": "星系内卫星静态位置。"},
+        "mapplanets": {"label": "行星", "desc": "星系内行星静态位置。"},
+        "mapstargates": {"label": "星门", "desc": "星门和跳跃连接静态数据。"},
+        "mapstars": {"label": "恒星", "desc": "恒星类型和位置数据。"},
+        "metagroups": {"label": "Meta 分组", "desc": "T1、T2、势力、官员、死亡空间等 Meta 分类。"},
+        "npccharacters": {"label": "NPC 角色", "desc": "NPC 角色静态定义。"},
+        "npccorporations": {"label": "NPC 军团", "desc": "NPC 军团资料。"},
+        "npcstations": {"label": "NPC 空间站", "desc": "官方 SDE 中的 NPC 空间站静态数据。"},
+        "planetresources": {"label": "行星资源", "desc": "行星资源分布相关数据。"},
+        "planetSchematics": {"label": "行星工业配方", "desc": "PI 配方和产物定义。"},
+        "researchagents": {"label": "科研代理人", "desc": "科研代理人和研究领域。"},
+        "skinlicenses": {"label": "涂装许可证", "desc": "SKIN 许可证物品关系。"},
+        "skins": {"label": "舰船涂装", "desc": "SKIN 涂装定义。"},
+        "sovereigntyupgrades": {"label": "主权升级", "desc": "主权设施升级资料。"},
+        "stationoperations": {"label": "空间站运营类型", "desc": "NPC 空间站运营类型。"},
+        "stationservices": {"label": "空间站服务", "desc": "空间站可提供服务定义。"},
+        "tournamentrulesets": {"label": "锦标赛规则集", "desc": "锦标赛规则配置。"},
+        "typematerials": {"label": "物品材料", "desc": "物品精炼或制造基础材料关系。"},
+    }
+)
+
 FIELD_INFO = {
     "_key": {"label": "记录键", "meaning": "该记录在当前文件中的主键或推断键。"},
     "typeID": {"label": "物品 ID", "meaning": "游戏内物品类型的唯一编号。"},
@@ -115,6 +156,93 @@ FIELD_INFO = {
     "time": {"label": "耗时", "meaning": "对应活动所需时间。"},
     "wormholeClassID": {"label": "虫洞等级", "meaning": "虫洞星系所属的 W-space 等级。"},
 }
+
+FIELD_INFO.update(
+    {
+        "constellationIDs": {"label": "星座列表", "meaning": "该星域包含的星座 ID 列表。"},
+        "solarSystemIDs": {"label": "星系列表", "meaning": "该星座包含的星系 ID 列表。"},
+        "planetIDs": {"label": "行星列表", "meaning": "该星系包含的行星 ID 列表。"},
+        "moonIDs": {"label": "卫星列表", "meaning": "该行星包含的卫星 ID 列表。"},
+        "stargateIDs": {"label": "星门列表", "meaning": "该星系包含的星门 ID 列表。"},
+        "starID": {"label": "恒星 ID", "meaning": "该星系中心恒星的 ID。"},
+        "securityStatus": {"label": "安全等级", "meaning": "星系安全等级，通常显示为 -1.0 到 1.0。"},
+        "securityClass": {"label": "安全等级分类", "meaning": "官方 SDE 对星系安全等级的粗分类。"},
+        "luminosity": {"label": "亮度", "meaning": "恒星或星系相关的亮度参数。"},
+        "position": {"label": "三维坐标", "meaning": "对象在宇宙空间中的三维坐标。"},
+        "position2D": {"label": "二维坐标", "meaning": "星图使用的二维投影坐标。"},
+        "x": {"label": "X 坐标", "meaning": "坐标轴 X 数值。"},
+        "y": {"label": "Y 坐标", "meaning": "坐标轴 Y 数值。"},
+        "z": {"label": "Z 坐标", "meaning": "坐标轴 Z 数值。"},
+        "border": {"label": "边境星系", "meaning": "该星系是否位于区域边界。"},
+        "corridor": {"label": "通道星系", "meaning": "该星系是否属于交通通道。"},
+        "fringe": {"label": "边缘星系", "meaning": "该星系是否属于边缘区域。"},
+        "hub": {"label": "枢纽星系", "meaning": "该星系是否属于交通或区域枢纽。"},
+        "international": {"label": "跨势力连接", "meaning": "该星系是否涉及跨势力区域连接。"},
+        "regional": {"label": "跨星域连接", "meaning": "该星系是否涉及跨星域连接。"},
+        "celestialIndex": {"label": "天体序号", "meaning": "天体在星系内的序号。"},
+        "orbitID": {"label": "环绕目标 ID", "meaning": "该天体或空间站所环绕的对象 ID。"},
+        "orbitIndex": {"label": "轨道序号", "meaning": "围绕目标时的轨道序号。"},
+        "operationID": {"label": "运营类型 ID", "meaning": "NPC 空间站运营类型 ID。"},
+        "ownerID": {"label": "所有者 ID", "meaning": "拥有该对象的势力、军团或实体 ID。"},
+        "useOperationName": {"label": "使用运营类型命名", "meaning": "空间站名称是否使用运营类型作为名称组成部分。"},
+        "reprocessingEfficiency": {"label": "精炼效率", "meaning": "空间站基础精炼效率。"},
+        "reprocessingHangarFlag": {"label": "精炼机库标记", "meaning": "精炼服务使用的机库 Flag。"},
+        "reprocessingStationsTake": {"label": "精炼站税", "meaning": "空间站收取的精炼比例。"},
+        "factionID": {"label": "势力 ID", "meaning": "关联 NPC 势力 ID。"},
+        "corporationID": {"label": "军团 ID", "meaning": "关联 NPC 或玩家军团 ID。"},
+        "allianceID": {"label": "联盟 ID", "meaning": "关联联盟 ID。"},
+        "agentID": {"label": "代理人 ID", "meaning": "NPC 代理人的唯一 ID。"},
+        "agentTypeID": {"label": "代理人类型 ID", "meaning": "代理人的类型 ID。"},
+        "divisionID": {"label": "部门 ID", "meaning": "代理人或军团所属部门 ID。"},
+        "level": {"label": "等级", "meaning": "代理人、技能或规则中使用的等级。"},
+        "quality": {"label": "品质", "meaning": "旧代理人系统中的品质参数。"},
+        "isLocator": {"label": "定位代理人", "meaning": "该代理人是否提供定位服务。"},
+        "skillID": {"label": "技能 ID", "meaning": "技能类型的 typeID。"},
+        "skillLevel": {"label": "技能等级", "meaning": "要求或提供的技能等级。"},
+        "primaryAttribute": {"label": "主属性", "meaning": "技能训练使用的主角色属性。"},
+        "secondaryAttribute": {"label": "副属性", "meaning": "技能训练使用的副角色属性。"},
+        "trainingTimeMultiplier": {"label": "训练时间倍率", "meaning": "技能训练所需时间倍率。"},
+        "attributeID": {"label": "属性 ID", "meaning": "Dogma 属性 ID。"},
+        "attributeName": {"label": "属性内部名", "meaning": "Dogma 属性的内部英文名。"},
+        "attributeCategoryID": {"label": "属性分类 ID", "meaning": "Dogma 属性所属分类 ID。"},
+        "dataType": {"label": "数据类型", "meaning": "Dogma 属性值的数据类型。"},
+        "defaultValue": {"label": "默认值", "meaning": "Dogma 属性未设置时使用的默认值。"},
+        "displayName": {"label": "显示名称", "meaning": "游戏 UI 中展示的名称。"},
+        "displayWhenZero": {"label": "零值时显示", "meaning": "属性为 0 时是否仍在 UI 中显示。"},
+        "highIsGood": {"label": "越高越好", "meaning": "该属性数值越高是否代表效果越好。"},
+        "stackable": {"label": "可堆叠", "meaning": "属性效果是否可堆叠。"},
+        "unitID": {"label": "单位 ID", "meaning": "属性显示使用的单位 ID。"},
+        "tooltipTitle": {"label": "提示标题", "meaning": "游戏 UI Tooltip 标题。"},
+        "tooltipDescription": {"label": "提示说明", "meaning": "游戏 UI Tooltip 说明。"},
+        "effectID": {"label": "效果 ID", "meaning": "Dogma 效果 ID。"},
+        "effectName": {"label": "效果内部名", "meaning": "Dogma 效果的内部英文名。"},
+        "effectCategoryID": {"label": "效果分类 ID", "meaning": "Dogma 效果分类。"},
+        "guid": {"label": "效果路径", "meaning": "Dogma 效果的内部路径标识。"},
+        "isOffensive": {"label": "攻击效果", "meaning": "该效果是否属于攻击性效果。"},
+        "isAssistance": {"label": "支援效果", "meaning": "该效果是否属于支援性效果。"},
+        "isWarpSafe": {"label": "跃迁安全", "meaning": "该效果是否可在跃迁相关状态下安全处理。"},
+        "disallowAutoRepeat": {"label": "禁止自动循环", "meaning": "模块效果是否禁止自动重复循环。"},
+        "dischargeAttributeID": {"label": "电容消耗属性 ID", "meaning": "表示电容消耗的 Dogma 属性 ID。"},
+        "durationAttributeID": {"label": "持续时间属性 ID", "meaning": "表示循环时间或持续时间的 Dogma 属性 ID。"},
+        "falloffAttributeID": {"label": "失准范围属性 ID", "meaning": "表示 Falloff 的 Dogma 属性 ID。"},
+        "rangeAttributeID": {"label": "射程属性 ID", "meaning": "表示最佳射程或作用范围的 Dogma 属性 ID。"},
+        "trackingSpeedAttributeID": {"label": "跟踪速度属性 ID", "meaning": "表示炮台跟踪速度的 Dogma 属性 ID。"},
+        "electronicChance": {"label": "电子战概率", "meaning": "效果是否涉及电子战概率判定。"},
+        "propulsionChance": {"label": "推进干扰概率", "meaning": "效果是否涉及推进相关概率判定。"},
+        "rangeChance": {"label": "范围概率", "meaning": "效果是否涉及范围概率判定。"},
+        "anchorable": {"label": "可锚定", "meaning": "对象是否可以锚定。"},
+        "anchored": {"label": "已锚定", "meaning": "对象是否处于锚定状态。"},
+        "fittableNonSingleton": {"label": "非单例可装配", "meaning": "非单例物品是否可以被装配。"},
+        "useBasePrice": {"label": "使用基础价格", "meaning": "市场或估值逻辑是否使用基础价格。"},
+        "raceID": {"label": "种族 ID", "meaning": "关联种族 ID。"},
+        "bloodlineID": {"label": "血统 ID", "meaning": "角色血统 ID。"},
+        "ancestryID": {"label": "出身 ID", "meaning": "角色出身背景 ID。"},
+        "shortDescription": {"label": "简短描述", "meaning": "较短的说明文本。"},
+        "sofFactionName": {"label": "SOF 势力名", "meaning": "图形资源系统使用的势力名称。"},
+        "sofHullName": {"label": "SOF 船体名", "meaning": "图形资源系统使用的船体名称。"},
+        "sofRaceName": {"label": "SOF 种族名", "meaning": "图形资源系统使用的种族名称。"},
+    }
+)
 
 ID_FIELD_ENTITY_HINTS = {
     "typeID": "type",
@@ -191,14 +319,101 @@ def split_words(name: str) -> list[str]:
     return [p.lower() for p in parts if p]
 
 
+WORD_LABELS = {
+    "id": "ID",
+    "ids": "ID 列表",
+    "name": "名称",
+    "names": "名称",
+    "type": "类型",
+    "types": "类型",
+    "group": "分组",
+    "groups": "分组",
+    "category": "分类",
+    "market": "市场",
+    "meta": "Meta",
+    "dogma": "Dogma",
+    "attribute": "属性",
+    "attributes": "属性",
+    "effect": "效果",
+    "effects": "效果",
+    "region": "星域",
+    "constellation": "星座",
+    "solar": "恒星系",
+    "system": "星系",
+    "station": "空间站",
+    "stations": "空间站",
+    "planet": "行星",
+    "moon": "卫星",
+    "star": "恒星",
+    "stargate": "星门",
+    "security": "安全",
+    "status": "状态",
+    "class": "等级",
+    "position": "坐标",
+    "radius": "半径",
+    "mass": "质量",
+    "volume": "体积",
+    "capacity": "容量",
+    "base": "基础",
+    "price": "价格",
+    "published": "发布",
+    "description": "描述",
+    "icon": "图标",
+    "graphic": "图形",
+    "sound": "音效",
+    "race": "种族",
+    "faction": "势力",
+    "corporation": "军团",
+    "alliance": "联盟",
+    "owner": "所有者",
+    "agent": "代理人",
+    "skill": "技能",
+    "level": "等级",
+    "required": "需求",
+    "primary": "主",
+    "secondary": "副",
+    "time": "时间",
+    "duration": "持续时间",
+    "range": "范围",
+    "falloff": "失准",
+    "damage": "伤害",
+    "shield": "护盾",
+    "armor": "装甲",
+    "structure": "结构",
+    "online": "在线",
+    "active": "激活",
+    "bonus": "加成",
+    "value": "值",
+    "default": "默认",
+    "display": "显示",
+    "tooltip": "提示",
+    "title": "标题",
+    "unit": "单位",
+    "material": "材料",
+    "materials": "材料",
+    "product": "产物",
+    "products": "产物",
+    "activity": "活动",
+    "activities": "活动",
+}
+
+
+def with_original(label: str, original: str) -> str:
+    if not original or label == original or label.endswith(f"（{original}）"):
+        return label
+    return f"{label}（{original}）"
+
+
 def humanize_field(name: str) -> str:
     if name in FIELD_INFO:
-        return FIELD_INFO[name]["label"]
+        return with_original(FIELD_INFO[name]["label"], name)
     if name.lower() in {k.lower(): k for k in FIELD_INFO}.keys():
         for key, value in FIELD_INFO.items():
             if key.lower() == name.lower():
-                return value["label"]
-    return " ".join(split_words(name)) or name
+                return with_original(value["label"], name)
+    words = split_words(name)
+    translated = " ".join(WORD_LABELS.get(word, word) for word in words).strip()
+    return with_original(translated or name, name)
 
 
 def field_meaning(name: str) -> str:
@@ -226,7 +441,7 @@ def file_display(stem: str) -> dict[str, str]:
     key = file_key_from_stem(stem)
     info = FILE_INFO.get(key)
     if info:
-        return info
+        return {"label": with_original(info["label"], stem), "desc": info["desc"]}
     return {"label": stem, "desc": "官方 SDE 数据文件。"}
 
 
@@ -258,6 +473,13 @@ def pick_zh(value: Any) -> str | None:
 
 def pick_en(value: Any) -> str | None:
     return pick_lang(value, ("en", "en-us"))
+
+
+def localized_name(zh: str | None, en: str | None, fallback: str) -> str:
+    title = zh or en or fallback
+    if zh and en and zh != en:
+        return f"{zh}（{en}）"
+    return title
 
 
 def flatten_text(value: Any) -> list[str]:
@@ -370,7 +592,7 @@ def infer_titles(record: dict[str, Any], stem: str, key: str, translation_map: d
     if not en and "iconFile" in record:
         en = safe_text(record["iconFile"])
 
-    title = zh or en or f"{stem} #{key}"
+    title = localized_name(zh, en, f"{stem} #{key}")
     alt = en if en and en != title else None
     return title, alt
 
@@ -872,7 +1094,7 @@ def entity_name(record: dict[str, Any], kind: str, mapping: dict[str, dict[str, 
     if not zh:
         zh = mapping.get(kind, {}).get(key)
     en = pick_en(record.get("name")) or pick_en(record.get("displayName"))
-    title = str(zh or en or key)
+    title = str(localized_name(zh, en, key))
     return title, en if en and en != title else None
 
 
