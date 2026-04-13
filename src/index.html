@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EVE SDE Browser</title>
+    <meta name="description" content="一个把官方 EVE Online SDE 转成纯静态可搜索网站的 GitHub Pages 项目。" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="eyebrow">Static Data Export</div>
+          <h1>EVE SDE Browser</h1>
+          <p id="build-meta" class="muted">正在加载构建信息…</p>
+        </div>
+
+        <section class="panel">
+          <label class="label" for="search-input">全局搜索</label>
+          <input id="search-input" class="input" type="search" placeholder="输入名称、ID、分组、市场组、星系…" />
+          <p class="muted small">只搜索本地静态数据，不调用运行时接口。</p>
+          <div id="search-status" class="status"></div>
+          <div id="search-results" class="list"></div>
+        </section>
+
+        <section class="panel grow">
+          <div class="section-head">
+            <h2>数据文件</h2>
+            <span id="file-count" class="pill">0</span>
+          </div>
+          <div id="file-list" class="list scroll"></div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="panel hero">
+          <div>
+            <div class="eyebrow">Official SDE → Static Pages</div>
+            <h2>把官方 SDE 改造成可读、可查、可浏览的网站</h2>
+            <p class="muted">构建阶段下载官方 SDE，运行阶段只读取静态 JSON 分片。没有后端、没有数据库、没有在线接口依赖。</p>
+          </div>
+          <div class="metrics">
+            <div class="metric"><span>版本</span><strong id="metric-build">-</strong></div>
+            <div class="metric"><span>文件</span><strong id="metric-files">-</strong></div>
+            <div class="metric"><span>当前</span><strong id="metric-current">首页</strong></div>
+          </div>
+        </section>
+
+        <section class="content">
+          <section class="panel viewer">
+            <div class="section-head row">
+              <div>
+                <h2 id="viewer-title">欢迎</h2>
+                <p id="viewer-subtitle" class="muted">从左侧选择一个文件，或者先搜索具体条目。</p>
+              </div>
+              <div class="actions">
+                <button id="prev-page" class="button" disabled>上一页</button>
+                <button id="next-page" class="button" disabled>下一页</button>
+              </div>
+            </div>
+            <div id="viewer-toolbar" class="toolbar hidden"></div>
+            <div id="record-list" class="list"></div>
+          </section>
+
+          <section class="panel detail">
+            <div class="section-head">
+              <h2>详情</h2>
+              <span id="detail-tag" class="pill">未选择</span>
+            </div>
+            <div id="detail-card" class="detail-card empty">选中一条记录后，这里会显示整理后的摘要和原始 JSON。</div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
