@@ -6,7 +6,7 @@
     <title>EVE SDE 中文资料站</title>
     <meta
       name="description"
-      content="基于官方 EVE Online SDE 构建的纯静态中文资料站，支持本地搜索、字段释义和游戏内名称汉化。"
+      content="基于官方 EVE Online SDE 和 CEVE 中文数据构建的静态资料站，支持市场分类、星图位置、空间站、公开建筑、物品名与 ID 查询。"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -16,8 +16,8 @@
         <div class="brand panel">
           <div class="eyebrow">EVE Online Static Data Export</div>
           <h1>EVE SDE 中文资料站</h1>
-          <p class="muted" id="build-meta">正在加载构建信息…</p>
-          <p class="muted small" id="translation-meta">正在检查汉化映射状态…</p>
+          <p class="muted" id="build-meta">正在加载构建信息...</p>
+          <p class="muted small" id="translation-meta">正在检查汉化映射状态...</p>
         </div>
 
         <section class="panel">
@@ -26,10 +26,10 @@
             id="search-input"
             class="input"
             type="search"
-            placeholder="搜索物品名、空间站、星系、ID、英文名…"
+            placeholder="搜索物品、星系、空间站、英文名或 ID..."
           />
           <p class="muted small">
-            搜索完全在浏览器本地完成，不依赖运行时接口。
+            搜索在浏览器本地完成。优先命中中文名、英文原名、ID 和 CEVE 市场分类路径。
           </p>
           <div id="search-status" class="status"></div>
           <div id="search-results" class="list"></div>
@@ -37,7 +37,7 @@
 
         <section class="panel grow">
           <div class="section-head">
-            <h2>数据文件</h2>
+            <h2>原始 SDE 文件</h2>
             <span id="file-count" class="pill">0</span>
           </div>
           <div id="file-list" class="list scroll"></div>
@@ -47,10 +47,10 @@
       <main class="main">
         <section class="panel hero">
           <div>
-            <div class="eyebrow">官方 SDE → 中文可读站点</div>
-            <h2>把原始静态数据改造成可读、可查、可理解的资料网站</h2>
+            <div class="eyebrow">官方 SDE + CEVE 中文数据</div>
+            <h2>按游戏里的市场和星图方式查询静态数据</h2>
             <p class="muted">
-              构建阶段下载官方 SDE，并优先使用中文字段；同时补充中文映射表，把物品、星域、星座、星系、空间站等名称尽量转成玩家熟悉的游戏内中文。
+              默认入口是市场分类和宇宙位置。需要深入排查时，也可以打开原始 SDE 文件查看字段、ID 和 JSON。
             </p>
           </div>
           <div class="metrics">
@@ -60,18 +60,24 @@
           </div>
         </section>
 
+        <section class="mode-tabs" aria-label="浏览方式">
+          <button id="tab-market" class="tab active" type="button">市场分类</button>
+          <button id="tab-universe" class="tab" type="button">星图位置</button>
+          <button id="tab-raw" class="tab" type="button">原始 SDE</button>
+        </section>
+
         <section class="content">
           <section class="panel viewer">
             <div class="section-head row">
               <div>
                 <h2 id="viewer-title">欢迎</h2>
                 <p id="viewer-subtitle" class="muted">
-                  从左侧选择数据文件，或者先搜索具体内容。
+                  先从市场分类、星图位置或左侧搜索进入。
                 </p>
               </div>
               <div class="actions">
-                <button id="prev-page" class="button" disabled>上一分片</button>
-                <button id="next-page" class="button" disabled>下一分片</button>
+                <button id="prev-page" class="button hidden" disabled>上一分片</button>
+                <button id="next-page" class="button hidden" disabled>下一分片</button>
               </div>
             </div>
             <div id="viewer-toolbar" class="toolbar hidden"></div>
@@ -84,7 +90,7 @@
               <span id="detail-tag" class="pill">未选择</span>
             </div>
             <div id="detail-card" class="detail-card empty">
-              选中一条记录后，这里会显示中文标题、英文原名、字段释义和原始 JSON。
+              选中一条记录后，这里会显示中文名、英文原名、市场路径、位置层级、常用 ID 和原始 JSON。
             </div>
           </section>
         </section>

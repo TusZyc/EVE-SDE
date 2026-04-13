@@ -9,6 +9,7 @@ import urllib.request
 import zipfile
 from collections import Counter
 from datetime import datetime, timezone
+from html import unescape
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,23 @@ MAX_RECORDS = int(os.environ.get("MAX_RECORDS_PER_SHARD", "600"))
 MAX_BYTES = int(os.environ.get("MAX_BYTES_PER_SHARD", "2500000"))
 SEARCH_MIN = 2
 USER_AGENT = "Mozilla/5.0 (compatible; EVE-SDE-Browser/2.0)"
+SEARCH_INDEX_FILES = {
+    "types",
+    "groups",
+    "categories",
+    "marketGroups",
+    "metaGroups",
+    "dogmaAttributes",
+    "dogmaEffects",
+    "mapRegions",
+    "mapConstellations",
+    "mapSolarSystems",
+    "staStations",
+    "factions",
+    "races",
+    "blueprints",
+    "skills",
+}
 
 PREFERRED_LANGS = ("zh", "zh-cn", "en", "en-us", "ja", "de", "fr", "ko", "ru", "es")
 
@@ -270,6 +288,30 @@ def safe_text(value: Any) -> str | None:
     return pick_lang(value)
 
 
+def clean_html(value: str | None) -> str | None:
+    if not value:
+        return None
+    text_value = re.sub(r"<a\s+href=showinfo:(\d+)>", "", value, flags=re.I)
+    text_value = re.sub(r"</a>", "", text_value, flags=re.I)
+    text_value = re.sub(r"<[^>]+>", "", text_value)
+    text_value = unescape(text_value)
+    text_value = re.sub(r"\s+", " ", text_value).strip()
+    return text_value or None
+
+
+def as_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    if re.fullmatch(r"\d+\.0", text_value):
+        return text_value[:-2]
+    return text_value
+
+
 def infer_key(record: dict[str, Any], stem: str) -> str:
     if "_key" in record:
         return str(record["_key"])
@@ -296,6 +338,8 @@ def infer_titles(record: dict[str, Any], stem: str, key: str, translation_map: d
         if kind == entity_kind and field in record and not isinstance(record[field], (dict, list)):
             entity_id = str(record[field])
             break
+    if entity_id is None and entity_kind and "_key" in record and not isinstance(record["_key"], (dict, list)):
+        entity_id = str(record["_key"])
 
     zh: str | None = None
     if entity_kind and entity_id:
@@ -335,9 +379,10 @@ def collect_search_tokens(record: dict[str, Any], stem: str, title: str, alt_tit
     tokens = [stem, title]
     if alt_title:
         tokens.append(alt_title)
-    for field in ("name", "displayName", "description", "effectName", "groupName", "categoryName"):
-        if field in record:
-            tokens.extend(flatten_text(record[field]))
+    ui = record.get("_ui") if isinstance(record.get("_ui"), dict) else {}
+    market_path = ui.get("marketPath")
+    if isinstance(market_path, list):
+        tokens.extend(str(part) for part in market_path)
     for field, value in record.items():
         if field.lower().endswith("id") and not isinstance(value, (dict, list)):
             tokens.append(str(value))
@@ -385,6 +430,10 @@ def infer_summary(record: dict[str, Any], stem: str, key: str, title: str, alt_t
     bits = [file_info["label"], f"键值 {key}"]
     if alt_title:
         bits.append(alt_title)
+    ui = record.get("_ui") if isinstance(record.get("_ui"), dict) else {}
+    market_path = ui.get("marketPath")
+    if isinstance(market_path, list) and market_path:
+        bits.append("市场: " + " / ".join(str(part) for part in market_path[:5]))
     for field in ("groupID", "categoryID", "marketGroupID", "metaGroupID", "factionID", "raceID", "published"):
         if field in record:
             bits.append(f"{humanize_field(field)}: {short_value(record[field])}")
@@ -396,15 +445,29 @@ def compact(record: dict[str, Any], stem: str, translation_map: dict[str, dict[s
     key = infer_key(out, stem)
     title, alt_title = infer_titles(out, stem, key, translation_map)
     file_info = file_display(stem)
+    file_key = file_key_from_stem(stem)
+    entity_kind = guess_entity_kind(out, file_key)
+    entity_id = key
+    market_path = translation_map.get("type_market_path", {}).get(entity_id) if entity_kind == "type" else None
+    localized_description = translation_map.get("type_description", {}).get(entity_id) if entity_kind == "type" else None
+    location_meta = None
+    if entity_kind == "system":
+        location_meta = translation_map.get("system_meta", {}).get(entity_id)
+    elif entity_kind == "station":
+        location_meta = translation_map.get("station_meta", {}).get(entity_id)
     out["_ui"] = {
         "key": key,
         "title": title,
         "altTitle": alt_title,
-        "summary": infer_summary(out, stem, key, title, alt_title),
+        "marketPath": market_path,
+        "localizedDescription": localized_description,
+        "location": location_meta,
+        "summary": "",
         "fileLabel": file_info["label"],
         "fileDesc": file_info["desc"],
         "fieldNotes": build_field_notes(out),
     }
+    out["_ui"]["summary"] = infer_summary(out, stem, key, title, alt_title)
     return out
 
 
@@ -448,17 +511,18 @@ def process_file(
             fields.update(record.keys())
             item = compact(record, stem, translation_map)
             ui = item["_ui"]
-            search_entries.append(
-                {
-                    "file": stem,
-                    "key": ui["key"],
-                    "title": ui["title"],
-                    "altTitle": ui["altTitle"],
-                    "summary": ui["summary"],
-                    "fileLabel": ui["fileLabel"],
-                    "q": collect_search_tokens(record, stem, ui["title"], ui["altTitle"]),
-                }
-            )
+            if stem in SEARCH_INDEX_FILES:
+                search_entries.append(
+                    {
+                        "file": stem,
+                        "key": ui["key"],
+                        "title": ui["title"],
+                        "altTitle": ui["altTitle"],
+                        "summary": ui["summary"],
+                        "fileLabel": ui["fileLabel"],
+                        "q": collect_search_tokens(item, stem, ui["title"], ui["altTitle"]),
+                    }
+                )
             size = len(json.dumps(item, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
             if shard and (len(shard) >= MAX_RECORDS or shard_bytes + size > MAX_BYTES):
                 flush()
@@ -488,6 +552,27 @@ def xlsx_headers(row: list[Any]) -> list[str]:
     return headers
 
 
+def header_index(headers: list[str], names: tuple[str, ...]) -> int | None:
+    normalized_names = {normalize_key(name) for name in names if normalize_key(name) and normalize_key(name) != "id"}
+    lowered_names = {name.lower() for name in names}
+    for idx, header in enumerate(headers):
+        lowered = header.lower()
+        if lowered in lowered_names:
+            return idx
+    for idx, header in enumerate(headers):
+        normalized = normalize_key(header)
+        if normalized and normalized in normalized_names:
+            return idx
+    for idx, header in enumerate(headers):
+        normalized = normalize_key(header)
+        lowered = header.lower()
+        if normalized and any(name and name in normalized for name in normalized_names):
+            return idx
+        if any(name and name in lowered for name in lowered_names):
+            return idx
+    return None
+
+
 def guess_header_indexes(headers: list[str]) -> tuple[int | None, int | None, int | None]:
     normalized = [normalize_key(h) for h in headers]
     id_idx = None
@@ -507,10 +592,20 @@ def guess_header_indexes(headers: list[str]) -> tuple[int | None, int | None, in
                 break
         if id_idx is not None:
             break
+    if id_idx is None:
+        id_idx = header_index(
+            headers,
+            (
+                "物品ID", "星域ID", "星座ID", "星系ID", "空间站ID", "建筑物ID",
+                "分组ID", "大类ID", "市场分类ID", "势力ID", "种族ID", "ID",
+            ),
+        )
     for idx, original in enumerate(headers):
         if any(token in original.lower() for token in zh_tokens):
             zh_idx = idx
             break
+    if zh_idx is None:
+        zh_idx = header_index(headers, ("物品名称", "星域名字", "星座名字", "星系名字", "空间站名称", "建筑物名称", "名称", "名字"))
     for idx, original in enumerate(headers):
         if any(token in original.lower() for token in en_tokens):
             en_idx = idx
@@ -525,6 +620,16 @@ def guess_header_indexes(headers: list[str]) -> tuple[int | None, int | None, in
 
 def guess_sheet_entity(sheet_name: str, headers: list[str]) -> str | None:
     normalized_sheet = normalize_key(sheet_name)
+    if "物品" in sheet_name:
+        return "type"
+    if "空间站" in sheet_name or "建筑" in sheet_name:
+        return "station"
+    if "星系" in sheet_name:
+        return "system"
+    if "星座" in sheet_name:
+        return "constellation"
+    if "星域" in sheet_name:
+        return "region"
     if "station" in normalized_sheet:
         return "station"
     if "solarsystem" in normalized_sheet or normalized_sheet.endswith("system"):
@@ -550,8 +655,30 @@ def guess_sheet_entity(sheet_name: str, headers: list[str]) -> str | None:
     return None
 
 
-def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, str]]:
-    mapping: dict[str, dict[str, str]] = {kind: {} for kind in {"type", "region", "constellation", "system", "station", "group", "category", "marketgroup", "faction", "race"}}
+def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, Any]]:
+    mapping: dict[str, dict[str, Any]] = {
+        kind: {}
+        for kind in {
+            "type",
+            "region",
+            "constellation",
+            "system",
+            "station",
+            "structure",
+            "group",
+            "category",
+            "marketgroup",
+            "faction",
+            "race",
+            "type_description",
+            "type_market_path",
+            "region_meta",
+            "constellation_meta",
+            "system_meta",
+            "station_meta",
+            "structure_meta",
+        }
+    }
     if not xlsx_path or not xlsx_path.exists() or load_workbook is None:
         return mapping
 
@@ -575,7 +702,7 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, str]]:
             raw_id = row[id_idx]
             if raw_id is None:
                 continue
-            text_id = str(raw_id).strip()
+            text_id = as_id(raw_id)
             if not text_id or text_id.lower() == "id":
                 continue
             zh_value = safe_text(row[zh_idx]) if zh_idx < len(row) else None
@@ -586,7 +713,371 @@ def build_translation_map(xlsx_path: Path | None) -> dict[str, dict[str, str]]:
                 en_value = safe_text(row[en_idx])
                 if en_value and kind == "type":
                     mapping.setdefault("type_en", {})[text_id] = en_value
+
+    for sheet in workbook.worksheets:
+        rows = sheet.iter_rows(values_only=True)
+        try:
+            header_row = next(rows)
+        except StopIteration:
+            continue
+        headers = xlsx_headers(list(header_row))
+        title = sheet.title
+
+        if "物品" in title:
+            id_idx = header_index(headers, ("typeID", "物品ID"))
+            name_idx = header_index(headers, ("物品名称", "名称"))
+            desc_idx = header_index(headers, ("描述",))
+            path_indexes = [
+                idx
+                for idx, header in enumerate(headers)
+                if header and ("市场分类" in header or re.search(r"market\s*group", header, re.I))
+            ]
+            for row in rows:
+                row = list(row)
+                if id_idx is None or id_idx >= len(row):
+                    continue
+                text_id = as_id(row[id_idx])
+                if not text_id:
+                    continue
+                if name_idx is not None and name_idx < len(row):
+                    name = safe_text(row[name_idx])
+                    if name:
+                        mapping["type"][text_id] = name
+                if desc_idx is not None and desc_idx < len(row):
+                    desc = clean_html(safe_text(row[desc_idx]))
+                    if desc:
+                        mapping["type_description"][text_id] = desc
+                path = [
+                    safe_text(row[idx])
+                    for idx in path_indexes
+                    if idx < len(row) and safe_text(row[idx])
+                ]
+                if path:
+                    mapping["type_market_path"][text_id] = path
+
+        elif "星域" in title:
+            region_idx = header_index(headers, ("星域ID", "regionID"))
+            region_name_idx = header_index(headers, ("星域名字", "星域名称", "name"))
+            for row in rows:
+                row = list(row)
+                if region_idx is None or region_idx >= len(row):
+                    continue
+                region_id = as_id(row[region_idx])
+                if not region_id:
+                    continue
+                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
+                if region_name:
+                    mapping["region"][region_id] = region_name
+                    mapping["region_meta"][region_id] = {"name": region_name}
+
+        elif "星座" in title:
+            const_idx = header_index(headers, ("星座ID", "constellationID"))
+            const_name_idx = header_index(headers, ("星座名字", "星座名称"))
+            region_idx = header_index(headers, ("星域ID", "regionID"))
+            region_name_idx = header_index(headers, ("星域名字", "星域名称"))
+            for row in rows:
+                row = list(row)
+                if const_idx is None or const_idx >= len(row):
+                    continue
+                const_id = as_id(row[const_idx])
+                if not const_id:
+                    continue
+                const_name = safe_text(row[const_name_idx]) if const_name_idx is not None and const_name_idx < len(row) else None
+                region_id = as_id(row[region_idx]) if region_idx is not None and region_idx < len(row) else None
+                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
+                if const_name:
+                    mapping["constellation"][const_id] = const_name
+                mapping["constellation_meta"][const_id] = {
+                    "name": const_name,
+                    "regionID": region_id,
+                    "regionName": region_name,
+                }
+
+        elif "星系" in title:
+            system_idx = header_index(headers, ("星系ID", "solarSystemID", "systemID"))
+            system_name_idx = header_index(headers, ("星系名字", "星系名称"))
+            const_idx = header_index(headers, ("星座ID", "constellationID"))
+            const_name_idx = header_index(headers, ("星座名字", "星座名称"))
+            region_idx = header_index(headers, ("星域ID", "regionID"))
+            region_name_idx = header_index(headers, ("星域名字", "星域名称"))
+            security_idx = header_index(headers, ("安全等级", "securityStatus"))
+            for row in rows:
+                row = list(row)
+                if system_idx is None or system_idx >= len(row):
+                    continue
+                system_id = as_id(row[system_idx])
+                if not system_id:
+                    continue
+                system_name = safe_text(row[system_name_idx]) if system_name_idx is not None and system_name_idx < len(row) else None
+                const_id = as_id(row[const_idx]) if const_idx is not None and const_idx < len(row) else None
+                const_name = safe_text(row[const_name_idx]) if const_name_idx is not None and const_name_idx < len(row) else None
+                region_id = as_id(row[region_idx]) if region_idx is not None and region_idx < len(row) else None
+                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
+                security = row[security_idx] if security_idx is not None and security_idx < len(row) else None
+                if system_name:
+                    mapping["system"][system_id] = system_name
+                mapping["system_meta"][system_id] = {
+                    "name": system_name,
+                    "constellationID": const_id,
+                    "constellationName": const_name,
+                    "regionID": region_id,
+                    "regionName": region_name,
+                    "security": security,
+                }
+
+        elif "NPC空间站" in title:
+            station_idx = header_index(headers, ("空间站ID", "stationID"))
+            station_name_idx = header_index(headers, ("空间站名称", "空间站名字"))
+            system_idx = header_index(headers, ("星系ID", "solarSystemID", "systemID"))
+            system_name_idx = header_index(headers, ("星系名字", "星系名称"))
+            const_idx = header_index(headers, ("星座ID", "constellationID"))
+            const_name_idx = header_index(headers, ("星座名字", "星座名称"))
+            region_idx = header_index(headers, ("星域ID", "regionID"))
+            region_name_idx = header_index(headers, ("星域名字", "星域名称"))
+            security_idx = header_index(headers, ("安全等级", "securityStatus"))
+            for row in rows:
+                row = list(row)
+                if station_idx is None or station_idx >= len(row):
+                    continue
+                station_id = as_id(row[station_idx])
+                if not station_id:
+                    continue
+                station_name = safe_text(row[station_name_idx]) if station_name_idx is not None and station_name_idx < len(row) else None
+                system_id = as_id(row[system_idx]) if system_idx is not None and system_idx < len(row) else None
+                system_name = safe_text(row[system_name_idx]) if system_name_idx is not None and system_name_idx < len(row) else None
+                const_id = as_id(row[const_idx]) if const_idx is not None and const_idx < len(row) else None
+                const_name = safe_text(row[const_name_idx]) if const_name_idx is not None and const_name_idx < len(row) else None
+                region_id = as_id(row[region_idx]) if region_idx is not None and region_idx < len(row) else None
+                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
+                security = row[security_idx] if security_idx is not None and security_idx < len(row) else None
+                if station_name:
+                    mapping["station"][station_id] = station_name
+                mapping["station_meta"][station_id] = {
+                    "name": station_name,
+                    "systemID": system_id,
+                    "systemName": system_name,
+                    "constellationID": const_id,
+                    "constellationName": const_name,
+                    "regionID": region_id,
+                    "regionName": region_name,
+                    "security": security,
+                }
+
+        elif "玩家公开建筑" in title:
+            structure_idx = header_index(headers, ("建筑物ID", "structureID"))
+            structure_name_idx = header_index(headers, ("建筑物名称", "建筑名称"))
+            structure_type_idx = header_index(headers, ("建筑物类型", "建筑类型"))
+            system_idx = header_index(headers, ("星系ID", "solarSystemID", "systemID"))
+            system_name_idx = header_index(headers, ("星系名字", "星系名称"))
+            const_idx = header_index(headers, ("星座ID", "constellationID"))
+            const_name_idx = header_index(headers, ("星座名字", "星座名称"))
+            region_idx = header_index(headers, ("星域ID", "regionID"))
+            region_name_idx = header_index(headers, ("星域名字", "星域名称"))
+            security_idx = header_index(headers, ("安全等级", "securityStatus"))
+            for row in rows:
+                row = list(row)
+                if structure_idx is None or structure_idx >= len(row):
+                    continue
+                structure_id = as_id(row[structure_idx])
+                if not structure_id:
+                    continue
+                structure_name = safe_text(row[structure_name_idx]) if structure_name_idx is not None and structure_name_idx < len(row) else None
+                structure_type = safe_text(row[structure_type_idx]) if structure_type_idx is not None and structure_type_idx < len(row) else None
+                system_id = as_id(row[system_idx]) if system_idx is not None and system_idx < len(row) else None
+                system_name = safe_text(row[system_name_idx]) if system_name_idx is not None and system_name_idx < len(row) else None
+                const_id = as_id(row[const_idx]) if const_idx is not None and const_idx < len(row) else None
+                const_name = safe_text(row[const_name_idx]) if const_name_idx is not None and const_name_idx < len(row) else None
+                region_id = as_id(row[region_idx]) if region_idx is not None and region_idx < len(row) else None
+                region_name = safe_text(row[region_name_idx]) if region_name_idx is not None and region_name_idx < len(row) else None
+                security = row[security_idx] if security_idx is not None and security_idx < len(row) else None
+                if structure_name:
+                    mapping["structure"][structure_id] = structure_name
+                mapping["structure_meta"][structure_id] = {
+                    "name": structure_name,
+                    "type": structure_type,
+                    "systemID": system_id,
+                    "systemName": system_name,
+                    "constellationID": const_id,
+                    "constellationName": const_name,
+                    "regionID": region_id,
+                    "regionName": region_name,
+                    "security": security,
+                }
     return mapping
+
+
+def iter_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                records.append(obj)
+    return records
+
+
+def entity_name(record: dict[str, Any], kind: str, mapping: dict[str, dict[str, Any]]) -> tuple[str, str | None]:
+    key = str(record.get("_key") or record.get(f"{kind}ID") or "")
+    zh = mapping.get(kind, {}).get(key)
+    if not zh:
+        zh = pick_zh(record.get("name")) or pick_zh(record.get("displayName"))
+    en = pick_en(record.get("name")) or pick_en(record.get("displayName"))
+    title = str(zh or en or key)
+    return title, en if en and en != title else None
+
+
+def security_band(value: Any) -> str:
+    try:
+        sec = float(value)
+    except (TypeError, ValueError):
+        return "未知安全等级"
+    if sec >= 0.45:
+        return "高安"
+    if sec > 0.0:
+        return "低安"
+    return "零安/虫洞"
+
+
+def add_market_path(root: dict[str, Any], path: list[str], type_id: str) -> None:
+    node = root
+    for name in path:
+        children = node.setdefault("children", {})
+        node = children.setdefault(name, {"name": name, "children": {}, "typeIDs": []})
+    node.setdefault("typeIDs", []).append(type_id)
+
+
+def compact_tree(node: dict[str, Any]) -> dict[str, Any]:
+    children = node.get("children", {})
+    return {
+        "name": node.get("name", "市场"),
+        "typeIDs": sorted(set(node.get("typeIDs", [])), key=lambda value: int(value) if str(value).isdigit() else str(value)),
+        "children": [compact_tree(child) for _, child in sorted(children.items(), key=lambda item: item[0])],
+    }
+
+
+def build_game_data(extracted: Path, mapping: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    types = iter_jsonl(extracted / "types.jsonl")
+    groups = {str(item.get("_key")): item for item in iter_jsonl(extracted / "groups.jsonl")}
+    categories = {str(item.get("_key")): item for item in iter_jsonl(extracted / "categories.jsonl")}
+    market_groups = {str(item.get("_key")): item for item in iter_jsonl(extracted / "marketGroups.jsonl")}
+
+    type_index: dict[str, dict[str, Any]] = {}
+    market_root: dict[str, Any] = {"name": "市场", "children": {}, "typeIDs": []}
+    for record in types:
+        type_id = as_id(record.get("_key"))
+        if not type_id:
+            continue
+        title, alt = entity_name(record, "type", mapping)
+        group_id = as_id(record.get("groupID"))
+        group = groups.get(group_id or "")
+        category = categories.get(str(group.get("categoryID")) if group else "")
+        market_group_id = as_id(record.get("marketGroupID"))
+        market_group = market_groups.get(market_group_id or "")
+        market_path = mapping.get("type_market_path", {}).get(type_id)
+        if not market_path and market_group:
+            market_path = []
+            current = market_group
+            seen: set[str] = set()
+            while current:
+                current_id = as_id(current.get("_key"))
+                if not current_id or current_id in seen:
+                    break
+                seen.add(current_id)
+                name, _ = entity_name(current, "marketgroup", mapping)
+                market_path.insert(0, name)
+                parent_id = as_id(current.get("parentGroupID"))
+                current = market_groups.get(parent_id or "")
+        if isinstance(market_path, list) and market_path:
+            add_market_path(market_root, [str(part) for part in market_path], type_id)
+        group_name, _ = entity_name(group, "group", mapping) if group else (None, None)
+        category_name, _ = entity_name(category, "category", mapping) if category else (None, None)
+        desc = mapping.get("type_description", {}).get(type_id) or clean_html(pick_zh(record.get("description")))
+        type_index[type_id] = {
+            "id": type_id,
+            "name": title,
+            "en": alt,
+            "published": bool(record.get("published")),
+            "groupID": group_id,
+            "groupName": group_name,
+            "categoryID": as_id(group.get("categoryID")) if group else None,
+            "categoryName": category_name,
+            "marketGroupID": market_group_id,
+            "marketPath": market_path or [],
+            "description": desc,
+        }
+
+    region_tree: dict[str, dict[str, Any]] = {}
+    for region_id, meta in mapping.get("region_meta", {}).items():
+        region_tree[region_id] = {"id": region_id, "name": meta.get("name"), "constellations": {}}
+    for const_id, meta in mapping.get("constellation_meta", {}).items():
+        region_id = meta.get("regionID")
+        if not region_id:
+            continue
+        region = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})
+        region["constellations"].setdefault(const_id, {"id": const_id, "name": meta.get("name"), "systems": {}})
+    for system_id, meta in mapping.get("system_meta", {}).items():
+        region_id = meta.get("regionID")
+        const_id = meta.get("constellationID")
+        if not region_id or not const_id:
+            continue
+        region = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})
+        const = region["constellations"].setdefault(const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}})
+        const["systems"][system_id] = {
+            "id": system_id,
+            "name": meta.get("name"),
+            "security": meta.get("security"),
+            "securityBand": security_band(meta.get("security")),
+            "stations": [],
+            "structures": [],
+        }
+    for station_id, meta in mapping.get("station_meta", {}).items():
+        system_id = meta.get("systemID")
+        region_id = meta.get("regionID")
+        const_id = meta.get("constellationID")
+        if region_id and const_id and system_id:
+            system = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})["constellations"].setdefault(
+                const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}}
+            )["systems"].setdefault(system_id, {"id": system_id, "name": meta.get("systemName"), "stations": [], "structures": []})
+            system.setdefault("stations", []).append({"id": station_id, "name": meta.get("name")})
+    for structure_id, meta in mapping.get("structure_meta", {}).items():
+        system_id = meta.get("systemID")
+        region_id = meta.get("regionID")
+        const_id = meta.get("constellationID")
+        if region_id and const_id and system_id:
+            system = region_tree.setdefault(region_id, {"id": region_id, "name": meta.get("regionName"), "constellations": {}})["constellations"].setdefault(
+                const_id, {"id": const_id, "name": meta.get("constellationName"), "systems": {}}
+            )["systems"].setdefault(system_id, {"id": system_id, "name": meta.get("systemName"), "stations": [], "structures": []})
+            system.setdefault("structures", []).append({"id": structure_id, "name": meta.get("name"), "type": meta.get("type")})
+
+    universe = []
+    for region in sorted(region_tree.values(), key=lambda item: item.get("name") or ""):
+        constellations = []
+        for const in sorted(region["constellations"].values(), key=lambda item: item.get("name") or ""):
+            systems = []
+            for system in sorted(const["systems"].values(), key=lambda item: item.get("name") or ""):
+                system["stations"] = sorted(system.get("stations", []), key=lambda item: item.get("name") or "")
+                system["structures"] = sorted(system.get("structures", []), key=lambda item: item.get("name") or "")
+                systems.append(system)
+            constellations.append({"id": const["id"], "name": const["name"], "systems": systems})
+        universe.append({"id": region["id"], "name": region["name"], "constellations": constellations})
+
+    return {
+        "typeIndex": type_index,
+        "marketTree": compact_tree(market_root),
+        "universe": universe,
+        "counts": {
+            "types": len(type_index),
+            "marketTypes": sum(1 for item in type_index.values() if item.get("marketPath")),
+            "regions": len(universe),
+            "stations": len(mapping.get("station_meta", {})),
+            "structures": len(mapping.get("structure_meta", {})),
+        },
+    }
 
 
 def build(extracted: Path, build_no: int, variant: str, translation_map: dict[str, dict[str, str]], translation_meta: dict[str, Any]) -> None:
@@ -595,6 +1086,7 @@ def build(extracted: Path, build_no: int, variant: str, translation_map: dict[st
     data_root.mkdir(parents=True, exist_ok=True)
     search_entries: list[dict[str, Any]] = []
     manifests: list[dict[str, Any]] = []
+    game_data = build_game_data(extracted, translation_map)
 
     files = sorted(extracted.rglob("*.jsonl"), key=lambda p: str(p.relative_to(extracted)).lower())
     if not files:
@@ -623,6 +1115,10 @@ def build(extracted: Path, build_no: int, variant: str, translation_map: dict[st
         encoding="utf-8",
     )
     (DIST / "data" / "field-glossary.json").write_text(json.dumps(glossary, ensure_ascii=False, indent=2), encoding="utf-8")
+    (DIST / "data" / "game-data.json").write_text(
+        json.dumps(game_data, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
     (DIST / "data" / "meta.json").write_text(
         json.dumps(
             {
@@ -631,6 +1127,7 @@ def build(extracted: Path, build_no: int, variant: str, translation_map: dict[st
                 "variant": variant,
                 "generatedAt": datetime.now(timezone.utc).isoformat(),
                 "fileCount": len(manifests),
+                "gameDataCounts": game_data["counts"],
                 "files": manifests,
                 "translationMeta": translation_meta,
             },
@@ -681,7 +1178,7 @@ def main() -> None:
                 translation_meta["externalTranslationWorkbook"] = {
                     "url": CEVE_XLSX_URL,
                     "status": "loaded",
-                    "sheetsApplied": sorted(k for k, v in translation_map.items() if v),
+                    "sheetsApplied": sorted(k for k, v in translation_map.items() if v and not k.endswith("_meta")),
                 }
             else:
                 translation_meta["externalTranslationWorkbook"] = {
